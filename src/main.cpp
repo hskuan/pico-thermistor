@@ -20,10 +20,8 @@ void loop() {
     float tempK   = 1.0f / (1.0f / T0 + logf(r_ntc / R0) / BETA);
     float tempC   = tempK - 273.15f;
 
-    Serial.print("raw="); Serial.print(raw);
-    Serial.print("  V="); Serial.print(voltage, 3);
-    Serial.print("  R_ntc="); Serial.print(r_ntc, 0);
-    Serial.print("  Temp="); Serial.print(tempC, 2);
+    Serial.print("Temp: ");
+    Serial.print(tempC, 2);
     Serial.println(" C");
     delay(1000);
 }

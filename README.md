@@ -1,13 +1,13 @@
 # picothermistor
 
-Raspberry Pi Pico W firmware that reads an NTC100K thermistor via ADC and prints temperature over USB serial at 1 Hz.
+Raspberry Pi Pico W firmware that reads an NTC100K thermistor via ADC, prints temperature over USB serial, and publishes readings to an MQTT broker every 5 seconds.
 
 ## Hardware
 
 - Raspberry Pi Pico W
 - NTC100K thermistor in a voltage divider with a 100 kΩ fixed resistor
-  - Fixed resistor from 3.3 V to the midpoint (ADC pin 26)
-  - Thermistor from the midpoint to GND
+  - Fixed resistor from 3.3 V to GPIO26 (physical pin 31)
+  - Thermistor from GPIO26 to GND
 - USB cable (powers the board and carries serial data)
 
 ## Dependencies
@@ -17,8 +17,9 @@ Raspberry Pi Pico W firmware that reads an NTC100K thermistor via ADC and prints
 | [VS Code](https://code.visualstudio.com/) | Editor |
 | [PlatformIO IDE extension](https://marketplace.visualstudio.com/items?itemName=platformio.platformio-ide) | Build system, uploading, serial monitor |
 | Git | Required by PlatformIO to fetch the Arduino-Pico platform |
+| Mosquitto (or any MQTT broker) | Receives temperature readings |
 
-PlatformIO downloads all compiler toolchains and the Arduino-Pico framework automatically on first build — nothing else to install manually.
+PlatformIO downloads all compiler toolchains, the Arduino-Pico framework, and the PubSubClient library automatically on first build.
 
 > **Note:** The official PlatformIO `raspberrypi` platform does not support the Pico W's board ID (`rpipicow`). This project uses the [maxgerhardt/platform-raspberrypi](https://github.com/maxgerhardt/platform-raspberrypi) wrapper, which bundles the earlephilhower Arduino-Pico core and does support it.
 
@@ -31,19 +32,62 @@ Install VS Code, then install the **PlatformIO IDE** extension from the Extensio
 ### 2. Clone the repository
 
 ```bash
-git clone <repo-url>
-cd picothermistor
+git clone https://github.com/hskuan/pico-thermistor.git
+cd pico-thermistor
 ```
 
-### 3. Open in VS Code
+### 3. Create your config file
+
+```bash
+cp include/config.h.example include/config.h
+```
+
+Edit `include/config.h` and fill in your WiFi and MQTT credentials:
+
+```cpp
+#define WIFI_SSID      "your-ssid"
+#define WIFI_PASSWORD  "your-password"
+
+#define MQTT_BROKER    "192.168.1.x"
+#define MQTT_PORT      1883
+#define MQTT_TOPIC     "sensors/thermistor/temperature"
+#define MQTT_CLIENT_ID "pico-thermistor"
+#define MQTT_USER      "your-mqtt-username"
+#define MQTT_PASSWORD  "your-mqtt-password"
+```
+
+`config.h` is gitignored and will never be committed.
+
+### 4. MQTT broker setup (Mosquitto on Debian/Ubuntu)
+
+If you don't have a user set up yet:
+
+```bash
+sudo mosquitto_passwd -c /etc/mosquitto/passwd <username>
+```
+
+Ensure `/etc/mosquitto/conf.d/auth.conf` contains:
 
 ```
-File > Open Folder > select the picothermistor folder
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+```
+
+Then restart the broker:
+
+```bash
+sudo systemctl restart mosquitto
+```
+
+### 5. Open in VS Code
+
+```
+File > Open Folder > select the pico-thermistor folder
 ```
 
 PlatformIO will detect `platformio.ini` automatically.
 
-### 4. Build (first build downloads the platform — takes a few minutes)
+### 6. Build (first build downloads the platform — takes a few minutes)
 
 ```bash
 pio run
@@ -51,14 +95,14 @@ pio run
 
 Or use the PlatformIO toolbar at the bottom of VS Code (checkmark icon).
 
-### 5. Fix IntelliSense (Arduino.h not found)
+### 7. Fix IntelliSense (Arduino.h not found)
 
 After the first build completes, regenerate the IntelliSense index so `#include <Arduino.h>` resolves:
 
 1. Open the Command Palette (`Ctrl+Shift+P`)
 2. Run **PlatformIO: Rebuild IntelliSense Index**
 
-### 6. Upload to the Pico W
+### 8. Upload to the Pico W
 
 Hold the **BOOTSEL** button on the Pico W while plugging in USB, then release it. The board mounts as a USB drive. Then run:
 
@@ -66,7 +110,7 @@ Hold the **BOOTSEL** button on the Pico W while plugging in USB, then release it
 pio run --target upload
 ```
 
-### 7. Monitor serial output
+### 9. Monitor serial output
 
 ```bash
 pio device monitor
@@ -74,16 +118,28 @@ pio device monitor
 
 Output (115200 baud):
 ```
-Temp: 23.45 C
-Temp: 23.47 C
+Connecting to WiFi... connected
+Connecting to MQTT connected
+Temp: 22.46 C
+Temp: 22.20 C
 ...
+```
+
+### 10. Subscribe to MQTT topic
+
+On the broker or any machine on the network:
+
+```bash
+mosquitto_sub -h 192.168.1.x -u <username> -P <password> -t sensors/thermistor/temperature
 ```
 
 ## Project structure
 
 ```
-src/main.cpp        — ADC read, Beta equation, serial output
-platformio.ini      — board, platform, framework config
+src/main.cpp              — ADC read, Beta equation, WiFi/MQTT, serial output
+include/config.h          — your credentials (gitignored)
+include/config.h.example  — template to copy from
+platformio.ini            — board, platform, framework, library config
 ```
 
 ## Thermistor math

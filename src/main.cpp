@@ -4,15 +4,32 @@
 #include <PubSubClient.h>
 #include "config.h"
 
-const int   ADC_PIN  = 26;
-const float VCC      = 3.3f;
-const float R_FIXED  = 100000.0f;
-const float R0       = 100000.0f;
-const float T0       = 298.15f;
-const float BETA     = 3950.0f;
+const int   ADC_PIN_1 = 26;
+const int   ADC_PIN_2 = 27;
+const float VCC       = 3.3f;
+const float R_FIXED   = 100000.0f;
+const float R0        = 100000.0f;
+const float T0        = 298.15f;
+const float BETA      = 3950.0f;
 
 WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
+
+float readTempC(int pin) {
+    int raw       = analogRead(pin);
+    float voltage = raw * (VCC / 4095.0f);
+    float r_ntc   = R_FIXED * voltage / (VCC - voltage);
+    float tempK   = 1.0f / (1.0f / T0 + logf(r_ntc / R0) / BETA);
+    return tempK - 273.15f;
+}
+
+void publishTemp(int sensor, float tempC) {
+    char topic[48];
+    char payload[16];
+    snprintf(topic,   sizeof(topic),   "%s/%d/temperature", MQTT_TOPIC_BASE, sensor);
+    snprintf(payload, sizeof(payload), "%.2f", tempC);
+    mqtt.publish(topic, payload);
+}
 
 void connectWiFi() {
     Serial.print("Connecting to WiFi");
@@ -49,19 +66,14 @@ void loop() {
     if (!mqtt.connected()) connectMQTT();
     mqtt.loop();
 
-    int raw      = analogRead(ADC_PIN);
-    float voltage = raw * (VCC / 4095.0f);
-    float r_ntc   = R_FIXED * voltage / (VCC - voltage);
-    float tempK   = 1.0f / (1.0f / T0 + logf(r_ntc / R0) / BETA);
-    float tempC   = tempK - 273.15f;
+    float t1 = readTempC(ADC_PIN_1);
+    float t2 = readTempC(ADC_PIN_2);
 
-    Serial.print("Temp: ");
-    Serial.print(tempC, 2);
-    Serial.println(" C");
+    Serial.print("T1: "); Serial.print(t1, 2); Serial.print(" C  ");
+    Serial.print("T2: "); Serial.print(t2, 2); Serial.println(" C");
 
-    char payload[16];
-    snprintf(payload, sizeof(payload), "%.2f", tempC);
-    mqtt.publish(MQTT_TOPIC, payload);
+    publishTemp(1, t1);
+    publishTemp(2, t2);
 
     digitalWrite(LED_BUILTIN, HIGH);
     delay(50);

@@ -1,13 +1,13 @@
 # picothermistor
 
-Raspberry Pi Pico W firmware that reads an NTC100K thermistor via ADC, prints temperature over USB serial, and publishes readings to an MQTT broker every 5 seconds.
+Raspberry Pi Pico W firmware that reads two NTC100K thermistors via ADC, prints readings over USB serial, and publishes to an MQTT broker every 5 seconds.
 
 ## Hardware
 
 - Raspberry Pi Pico W
-- NTC100K thermistor in a voltage divider with a 100 kΩ fixed resistor
-  - Fixed resistor from 3.3 V to GPIO26 (physical pin 31)
-  - Thermistor from GPIO26 to GND
+- 2× NTC100K thermistors, each in a voltage divider with a 100 kΩ fixed resistor
+  - Thermistor 1: fixed resistor from 3.3 V to GPIO26 (physical pin 31), thermistor from GPIO26 to GND
+  - Thermistor 2: fixed resistor from 3.3 V to GPIO27 (physical pin 32), thermistor from GPIO27 to GND
 - USB cable (powers the board and carries serial data)
 
 ## Dependencies
@@ -45,15 +45,15 @@ cp include/config.h.example include/config.h
 Edit `include/config.h` and fill in your WiFi and MQTT credentials:
 
 ```cpp
-#define WIFI_SSID      "your-ssid"
-#define WIFI_PASSWORD  "your-password"
+#define WIFI_SSID       "your-ssid"
+#define WIFI_PASSWORD   "your-password"
 
-#define MQTT_BROKER    "192.168.1.x"
-#define MQTT_PORT      1883
-#define MQTT_TOPIC     "sensors/thermistor/temperature"
-#define MQTT_CLIENT_ID "pico-thermistor"
-#define MQTT_USER      "your-mqtt-username"
-#define MQTT_PASSWORD  "your-mqtt-password"
+#define MQTT_BROKER     "192.168.1.x"
+#define MQTT_PORT       1883
+#define MQTT_TOPIC_BASE "sensors/thermistor"
+#define MQTT_CLIENT_ID  "pico-thermistor"
+#define MQTT_USER       "your-mqtt-username"
+#define MQTT_PASSWORD   "your-mqtt-password"
 ```
 
 `config.h` is gitignored and will never be committed.
@@ -120,23 +120,38 @@ Output (115200 baud):
 ```
 Connecting to WiFi... connected
 Connecting to MQTT connected
-Temp: 22.46 C
-Temp: 22.20 C
+T1: 22.46 C  T2: 23.12 C
+T1: 22.20 C  T2: 23.08 C
 ...
 ```
 
-### 10. Subscribe to MQTT topic
+### 10. Subscribe to MQTT topics
 
-On the broker or any machine on the network:
+Each thermistor publishes to its own sub-topic. Subscribe to both at once using a wildcard:
 
 ```bash
-mosquitto_sub -h 192.168.1.x -u <username> -P <password> -t sensors/thermistor/temperature
+mosquitto_sub -h 192.168.1.x -u <username> -P <password> -t "sensors/thermistor/+/temperature"
 ```
+
+Individual topics:
+- `sensors/thermistor/1/temperature`
+- `sensors/thermistor/2/temperature`
+
+### 11. Node-RED setup
+
+1. Install Node-RED: `sudo npm install -g --unsafe-perm node-red`
+2. Open Node-RED at `http://<broker-ip>:1880`
+3. Add an **MQTT In** node with topic `sensors/thermistor/+/temperature` and your broker credentials
+4. Wire it to a **Debug** node to confirm messages are arriving (`msg.topic` identifies which sensor)
+5. Install **node-red-dashboard** via Menu → Manage Palette
+6. Add a **Switch** node to route by topic:
+   - `msg.topic == "sensors/thermistor/1/temperature"` → Gauge / Chart for T1
+   - `msg.topic == "sensors/thermistor/2/temperature"` → Gauge / Chart for T2
 
 ## Project structure
 
 ```
-src/main.cpp              — ADC read, Beta equation, WiFi/MQTT, serial output
+src/main.cpp              — ADC reads, Beta equation, WiFi/MQTT, serial output
 include/config.h          — your credentials (gitignored)
 include/config.h.example  — template to copy from
 platformio.ini            — board, platform, framework, library config
@@ -155,4 +170,4 @@ Temperature is calculated from the ADC reading using the Beta equation:
 | `T₀` | 298.15 K | Nominal temperature (25 °C) |
 | `R₀` | 100 000 Ω | Nominal thermistor resistance at T₀ |
 | `B` | 3950 K | Beta coefficient (verify against your datasheet) |
-| `R_fixed` | 100 000 Ω | Fixed resistor in the voltage divider |
+| `R_fixed` | 100 000 Ω | Fixed resistor in the voltage divider (measure with multimeter for best accuracy) |

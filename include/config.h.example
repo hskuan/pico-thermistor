@@ -5,7 +5,7 @@
 
 #define MQTT_BROKER    "192.168.1.x"
 #define MQTT_PORT      1883
-#define MQTT_TOPIC     "sensors/thermistor/temperature"
+#define MQTT_TOPIC_BASE "sensors/thermistor"
 #define MQTT_CLIENT_ID "pico-thermistor"
 #define MQTT_USER      "your-mqtt-username"
 #define MQTT_PASSWORD  "your-mqtt-password"
